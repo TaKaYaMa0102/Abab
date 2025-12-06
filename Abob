@@ -5,7 +5,7 @@ from typing import Optional
 
 @loader.tds
 class CityAutomation(loader.Module):
-    """Автоматизация города для @good_biznesbot | by @adamantinesss"""
+    """Автоматизация города для @good_biznesbot | by @TaKaYaMa4a"""
 
     strings = {
         "name": "CityAutomation",
