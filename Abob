@@ -80,7 +80,7 @@ class CityAutomation(loader.Module):
                 msg = msgs[0]
                 
                 # 3. Нажимаем кнопки по очереди
-                buttons_to_click = ["Величающий", "Ресурсные точки", "Улучшить все"]
+                buttons_to_click = ["Мегаполис", "Ресурсные точки", "Улучшить все"]
                 for button_text in buttons_to_click:
                     if not self.active:
                         break
