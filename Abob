@@ -1,0 +1,139 @@
+from .. import loader, utils
+from asyncio import sleep
+from datetime import datetime
+from typing import Optional
+
+@loader.tds
+class CityAutomation(loader.Module):
+    """Автоматизация города для @good_biznesbot | by @adamantinesss"""
+
+    strings = {
+        "name": "CityAutomation",
+        "author": "@adamantinesss",
+        "started": "🚀 Автоматизация запущена",
+        "stopped": "🛑 Автоматизация остановлена",
+        "stats": "📊 Цикл #{}\n⏱ Время работы: {}",
+        "error": "⚠️ Ошибка: {}",
+        "interval_info": "⏰ Интервал: {} мин"
+    }
+
+    def __init__(self):
+        self.start_time = None
+        self.cycles = 0
+        self.active = False
+        self.config = loader.ModuleConfig(
+            "WORK_INTERVAL", 60,
+            lambda: "Интервал между циклами (в минутах)"
+        )
+
+    async def client_ready(self, client, db):
+        self.client = client
+        self._db = db
+
+    async def _click_button(self, msg, button_text: str) -> bool:
+        """Нажимает кнопку и ждёт обновления сообщения"""
+        if not hasattr(msg, 'buttons') or not msg.buttons:
+            return False
+
+        for row in msg.buttons:
+            for button in row:
+                if button_text in button.text:
+                    old_text = msg.text
+                    await button.click()
+                    await sleep(2)  # Обязательный КД 2 секунды
+                    
+                    # Проверяем, изменилось ли сообщение
+                    try:
+                        new_msg = await self.client.get_messages(msg.peer_id, ids=msg.id)
+                        return new_msg.text != old_text
+                    except:
+                        return False
+        return False
+
+    async def citystartcmd(self, message):
+        """Запустить автоматизацию | .citystart"""
+        if self.active:
+            await utils.answer(message, "❗ Уже работает!")
+            return
+
+        self.active = True
+        self.start_time = datetime.now()
+        self.cycles = 0
+
+        await utils.answer(message, 
+            f"{self.strings['started']}\n"
+            f"{self.strings['interval_info'].format(self.config['WORK_INTERVAL'])}"
+        )
+
+        while self.active:
+            try:
+                # 1. Отправляем /city
+                await self.client.send_message("@good_biznesbot", "/city")
+                await sleep(2)  # Ждём ответа
+
+                # 2. Получаем последнее сообщение
+                msgs = await self.client.get_messages("@good_biznesbot", limit=1)
+                if not msgs:
+                    await sleep(5)
+                    continue
+
+                msg = msgs[0]
+                
+                # 3. Нажимаем кнопки по очереди
+                buttons_to_click = ["Величающий", "Ресурсные точки", "Улучшить все"]
+                for button_text in buttons_to_click:
+                    if not self.active:
+                        break
+                    await self._click_button(msg, button_text)
+                    msg = await self.client.get_messages("@good_biznesbot", limit=1)  # Обновляем сообщение
+                    msg = msg[0] if msg else None
+                    if not msg:
+                        break
+
+                # 4. Отчёт и ожидание
+                self.cycles += 1
+                uptime = str(datetime.now() - self.start_time).split('.')[0]
+                await utils.answer(
+                    message,
+                    f"{self.strings['stats'].format(self.cycles, uptime)}\n"
+                    f"🔄 Следующий цикл через {self.config['WORK_INTERVAL']} мин"
+                )
+                await sleep(self.config['WORK_INTERVAL'] * 60)
+
+            except Exception as e:
+                await utils.answer(message, self.strings['error'].format(str(e)))
+                await sleep(10)
+
+    async def citystopcmd(self, message):
+        """Остановить | .citystop"""
+        if not self.active:
+            await utils.answer(message, "❗ Не запущена!")
+            return
+
+        self.active = False
+        uptime = str(datetime.now() - self.start_time).split('.')[0]
+        await utils.answer(
+            message,
+            f"{self.strings['stopped']}\n"
+            f"⏱ Общее время: {uptime}\n"
+            f"🔁 Всего циклов: {self.cycles}"
+        )
+
+    async def cityconfigcmd(self, message):
+        """Изменить интервал | .cityconfig <минуты>"""
+        args = utils.get_args(message)
+        if not args or not args[0].isdigit():
+            await utils.answer(
+                message,
+                f"{self.strings['interval_info'].format(self.config['WORK_INTERVAL'])}\n"
+                "❕ Пример: .cityconfig 30"
+            )
+            return
+
+        new_interval = int(args[0])
+        if new_interval < 1:
+            await utils.answer(message, "❌ Интервал должен быть > 0!")
+            return
+
+        self.config['WORK_INTERVAL'] = new_interval
+        await utils.answer(message, f"✅ Установлено: {new_interval} мин")
