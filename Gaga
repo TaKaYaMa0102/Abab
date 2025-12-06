@@ -1,0 +1,151 @@
+# =================================================================================
+#
+#   █████╗ ██████╗  █████╗ ███╗   ███╗ █████╗ ███╗   ██╗████████╗
+#  ██╔══██╗██╔══██╗██╔══██╗████╗ ████║██╔══██╗████╗  ██║╚══██╔══╝
+#  ███████║██║  ██║███████║██╔████╔██║███████║██╔██╗ ██║   ██║
+#  ██╔══██║██║  ██║██╔══██║██║╚██╔╝██║██╔══██║██║╚██╗██║   ██║
+#  ██║  ██║██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║██║ ╚████║   ██║
+#  ╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝
+#
+# =================================================================================
+#
+#  ██████╗ ██████╗ ███╗   ███╗███╗   ███╗ █████╗ ███╗   ██╗██████╗
+# ██╔════╝██╔═══██╗████╗ ████║████╗ ████║██╔══██╗████╗  ██║██╔══██╗
+# ██║     ██║   ██║██╔████╔██║██╔████╔██║███████║██╔██╗ ██║██║  ██║
+# ██║     ██║   ██║██║╚██╔╝██║██║╚██╔╝██║██╔══██║██║╚██╗██║██║  ██║
+# ╚██████╗╚██████╔╝██║ ╚═╝ ██║██║ ╚═╝ ██║██║  ██║██║ ╚████║██████╔╝
+#  ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝
+#
+# =================================================================================
+#
+# 🚀 МОЩНЫЙ ЧАТ-МОДУЛЬ ОТ ADAMANT
+# 💎 ВЕРСИЯ: ULTRA-PRO MAX | 2025
+#
+# =================================================================================
+# meta developer: @adamantinesss
+# =================================================================================
+# ⚠️ ВНИМАНИЕ: ТОЛЬКО ДЛЯ PRO-ПОЛЬЗОВАТЕЛЕЙ
+# =================================================================================
+from .. import loader, utils
+from asyncio import sleep
+from telethon.tl.types import Message
+from typing import Optional
+
+
+@loader.tds
+class Minebiznesbot(loader.Module):
+    """Копалка, и хороший помощьник. | by @adamantinesss"""
+
+    strings = {
+        "name": "MineBB",
+        "started": "<emoji document_id=5188488289350330143>⛏</emoji>🔇 <b>Режим копания активирован</b> (кнопки нажимаются без уведомлений)",
+        "stopped": "<emoji document_id=5377366434038952966>😠</emoji> <b>Копка остановлена</b>",
+        "error": "<emoji document_id=5377828362066603436>😬</emoji> <b>Ошибка:</b> {}",
+        "no_reply": "<emoji document_id=5377859487694598643>🤷‍♂️</emoji> <b>Ответьте на сообщение с кнопками!</b>",
+        "no_buttons": "<emoji document_id=5377859487694598643>🤷‍♂️</emoji> <b>Кнопки не найдены</b>",
+        "config_info": "<emoji document_id=5341715473882955310>⚙️</emoji> <b>Настройки:</b>\nКнопки: {}\nИнтервал: {} сек",
+    }
+
+    def __init__(self):
+        self.active = False
+        self.config = loader.ModuleConfig(
+            "BUTTONS", ["Копать", "👇"], lambda: "Кнопки для нажатия (через запятую)"
+        )
+        self.interval = 2
+
+    async def client_ready(self, client, db):
+        self.client = client
+        self._db = db
+
+    async def _click_silently(self, msg: Message) -> bool:
+        """Модуль активирован"""
+        try:
+            if not msg or not hasattr(msg, "buttons"):
+                return False
+
+            clicked = False
+            for btn_text in self.config["BUTTONS"]:
+                for row in msg.buttons:
+                    for button in row:
+                        if btn_text.lower() in button.text.lower():
+                            await button.click()
+                            clicked = True
+                            await sleep(2.5)  # Задержка между кликами
+            return clicked
+        except Exception:
+            return False
+
+    async def minecmd(self, message: Message):
+        """Запустить тихий режим | .amine (в ответ на сообщение)"""
+        reply = await message.get_reply_message()
+        if not reply:
+            await utils.answer(message, self.strings["no_reply"])
+            return
+
+        if self.active:
+            await utils.answer(
+                message,
+                "<emoji document_id=5188488289350330143>⛏</emoji> <b>Копает!</b>",
+            )
+            return
+
+        self.active = True
+        await utils.answer(message, self.strings["started"])
+
+        while self.active:
+            try:
+                fresh_msg = await self.client.get_messages(
+                    entity=reply.peer_id, ids=reply.id
+                )
+
+                if not await self._click_silently(fresh_msg):
+                    if not self.active:  # Проверяем, не остановлен ли кликер
+                        break
+                    await utils.answer(message, self.strings["no_buttons"])
+                    self.active = False
+                    break
+
+                await sleep(self.interval)
+            except Exception as e:
+                if self.active:  # Отправляем ошибку только если кликер не остановлен
+                    await utils.answer(message, self.strings["error"].format(e))
+                await sleep(3)
+
+    async def amstopcmd(self, message: Message):
+        """Остановить | .amstop"""
+        if not self.active:
+            await utils.answer(
+                message,
+                "<emoji document_id=5379846932271214613>🤩</emoji> <b>Перестал копать!</b>",
+            )
+            return
+
+        self.active = False
+        await utils.answer(message, self.strings["stopped"])
+
+    async def aconfigcmd(self, message: Message):
+        """Настройки | .aconfig <кнопки> <интервал>"""
+        args = utils.get_args_raw(message)
+
+        if not args:
+            await utils.answer(
+                message,
+                self.strings["config_info"].format(
+                    ", ".join(self.config["BUTTONS"]), self.interval
+                ),
+            )
+            return
+
+        try:
+            buttons, interval = map(str.strip, args.rsplit(" ", 1))
+            self.config["BUTTONS"] = [btn.strip() for btn in buttons.split(",")]
+            self.interval = max(0.5, float(interval))  # Минимум 0.5 сек
+            await utils.answer(
+                message,
+                "<emoji document_id=5276137623990064671>⚡️</emoji> <b>Настройки обновлены!</b>",
+            )
+        except:
+            await utils.answer(
+                message,
+                "<emoji document_id=5190443891039417869>🙈</emoji> <b>Неверный формат!</b>\nПример: <code>.aconfig Кнопка1,Кнопка2 3</code>",
+            )
