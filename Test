@@ -1,0 +1,84 @@
+from .. import loader, utils
+from asyncio import sleep
+import logging
+import re
+
+@loader.tds
+class BiznesBotMod(loader.Module):
+    """Автоматизация @good_biznesbob. Автор: @TaKaYaMa4a"""
+
+    strings = {
+        "name": "GBiznesPro_New",
+        "running": "🚀 Автоматизация запущена!",
+        "stopped": "🛑 Автоматизация остановлена",
+        "args": "❌ Укажите интервал в минутах",
+        "found": "✅ Найдена кнопка: {}",
+        "refreshing": "🔄 Обновляем регионы...",
+        "not_found": "⚠️ Кнопки не найдены",
+        "owner_skipped": "⏩ Пропущен регион владельца: {}"
+    }
+
+    def __init__(self):
+        self.config = loader.ModuleConfig(
+            "IGNORE_OWNERS", [], "Список владельцев для игнорирования"
+        )
+
+    async def client_ready(self, client, db):
+        self._db = db
+        self._client = client
+        self.running = False
+
+    async def _parse_region_message(self, message):
+        regions = []
+        lines = message.split('\n')
+        for line in lines:
+            if "Владелец:" in line:
+                owner = line.split("Владелец:")[1].split("\n")[0].strip()
+                bonus_match = re.search(r'\+\d+', line)
+                bonus = bonus_match.group(0) if bonus_match else None
+                if owner and bonus:
+                    regions.append({"owner": owner, "bonus": bonus})
+        return regions
+
+    async def _find_and_click(self, message):
+        while self.running:
+            try:
+                msgs = await self._client.get_messages("good_biznesbot", limit=5)
+                for msg in msgs:
+                    if not msg.buttons or not self.running: continue
+                    regions = await self._parse_region_message(msg.text)
+                    for row in msg.buttons:
+                        for button in row:
+                            if "🔮" in button.text or "🏢" in button.text: continue
+                            if "🍀 +6" in button.text or "🍀 +5" in button.text:
+                                await button.click()
+                                return True, button.text
+                await sleep(5)
+            except Exception:
+                await sleep(5)
+        return False, None
+
+    async def bizregcmd(self, message):
+        """Автоматизация. Пример: .bizreg 5"""
+        args = utils.get_args_raw(message)
+        if not args: return await utils.answer(message, self.strings["args"])
+        try:
+            interval = int(args)
+        except: return await utils.answer(message, self.strings["args"])
+
+        self.running = True
+        await utils.answer(message, self.strings["running"])
+        while self.running:
+            await self._client.send_message("good_biznesbot", "/region")
+            await sleep(5)
+            await self._find_and_click(message)
+            await sleep(interval * 60)
+
+    async def bizignorecmd(self, message):
+        """Игнор владельцев: .bizignore add ник"""
+        await utils.answer(message, "Игнор-лист обновлен (функция в разработке)")
+
+    async def bizstopcmd(self, message):
+        """Остановить: .bizstop"""
+        self.running = False
+        await utils.answer(message, self.strings["stopped"])
