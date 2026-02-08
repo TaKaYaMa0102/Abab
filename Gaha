@@ -3,27 +3,19 @@ from asyncio import sleep
 import logging
 import re
 
-
 @loader.tds
 class BiznesBotMod(loader.Module):
     """Автоматизация @good_biznesbob. Автор: @TaKaYaMa4a"""
 
     strings = {
-        "name": "GoodBiznesPro",
-        "running": "🚀 Автоматизация запущена! Ищем 🍀 +5/+6...",
+        "name": "GBiznesPro_New",
+        "running": "🚀 Автоматизация запущена!",
         "stopped": "🛑 Автоматизация остановлена",
         "args": "❌ Укажите интервал в минутах",
         "found": "✅ Найдена кнопка: {}",
         "refreshing": "🔄 Обновляем регионы...",
-        "not_found": "⚠️ Кнопки не найдены, пробуем еще раз",
-        "crystal_skipped": "⏩ Пропущена кнопка с кристаллом: {}",
-        "building_skipped": "⏩ Пропущена кнопка со зданием: {}",
-        "owner_skipped": "⏩ Пропущен регион владельца: {}",
-        "searching": "🔍 Продолжаем поиск кнопок...",
-        "ignore_set": "✅ Добавлен владелец в игнор-лист: {}",
-        "ignore_removed": "❌ Удален владелец из игнор-листа: {}",
-        "ignore_list": "📋 Игнор-лист владельцев: {}",
-        "ignore_clear": "🧹 Игнор-лист очищен"
+        "not_found": "⚠️ Кнопки не найдены",
+        "owner_skipped": "⏩ Пропущен регион владельца: {}"
     }
 
     def __init__(self):
@@ -36,163 +28,57 @@ class BiznesBotMod(loader.Module):
         self._client = client
         self.running = False
 
-    async def parse_region_message(self, message):
-        """Парсит сообщение с регионами и возвращает список регионов"""
+    async def _parse_region_message(self, message):
         regions = []
         lines = message.split('\n')
-        
         for line in lines:
             if "Владелец:" in line:
                 owner = line.split("Владелец:")[1].split("\n")[0].strip()
                 bonus_match = re.search(r'\+\d+', line)
                 bonus = bonus_match.group(0) if bonus_match else None
-                price_match = re.search(r'Цена: ([\d\.]+[kм]*)', line)
-                price = price_match.group(1) if price_match else None
-                income_match = re.search(r'Добыча: \+([\d\.]+[kм]*)', line)
-                income = income_match.group(1) if income_match else None
-                
-                if owner and bonus and price and income:
-                    regions.append({
-                        "owner": owner,
-                        "bonus": bonus,
-                        "price": price,
-                        "income": income
-                    })
-        
+                if owner and bonus:
+                    regions.append({"owner": owner, "bonus": bonus})
         return regions
 
-    async def find_and_click(self, message):
-        """Поиск и нажатие кнопок с учетом игнор-листа владельцев"""
+    async def _find_and_click(self, message):
         while self.running:
             try:
                 msgs = await self._client.get_messages("good_biznesbot", limit=5)
-                refreshed = False
-
                 for msg in msgs:
-                    if not msg.buttons or not self.running:
-                        continue
-
-                    # Парсим сообщение с регионами
-                    regions = await self.parse_region_message(msg.text)
-                    
-                    # Ищем 🍀 +6 или 🍀 +5 (без кристалла, зданий и игнорируемых владельцев)
+                    if not msg.buttons or not self.running: continue
+                    regions = await self._parse_region_message(msg.text)
                     for row in msg.buttons:
                         for button in row:
-                            if not self.running:
-                                return False, None
-                                
-                            if "🔮" in button.text:
-                                continue
-                            
-                            if "🏢" in button.text:
-                                continue
-                            
+                            if "🔮" in button.text or "🏢" in button.text: continue
                             if "🍀 +6" in button.text or "🍀 +5" in button.text:
-                                # Проверяем владельца региона
-                                button_index = msg.buttons.index(row) * len(row) + row.index(button)
-                                if regions and button_index < len(regions):
-                                    region = regions[button_index]
-                                    if region["owner"] in self.config["IGNORE_OWNERS"]:
-                                        await utils.answer(message, self.strings["owner_skipped"].format(region["owner"]))
-                                        continue
-                                
                                 await button.click()
                                 return True, button.text
-
-                    # Если не нашли - пробуем обновить
-                    if not refreshed:
-                        for row in msg.buttons:
-                            for button in row:
-                                if not self.running:
-                                    return False, None
-                                    
-                                if "🔮" in button.text or "🏢" in button.text:
-                                    continue
-                                
-                                if "обновить" in button.text.lower():
-                                    await button.click()
-                                    await sleep(3)
-                                    refreshed = True
-                                    break
-                            if refreshed:
-                                break
-
                 await sleep(5)
-
-            except Exception as e:
-                logging.exception("Ошибка при поиске кнопок")
+            except Exception:
                 await sleep(5)
-                
         return False, None
 
-    async def regioncmd(self, message):
-        """Автоматизация /region. Используй: .region <интервал в минутах>"""
+    async def bizregcmd(self, message):
+        """Автоматизация. Пример: .bizreg 5"""
         args = utils.get_args_raw(message)
-
-        if not args:
-            return await utils.answer(message, self.strings["args"])
-
+        if not args: return await utils.answer(message, self.strings["args"])
         try:
             interval = int(args)
-        except ValueError:
-            return await utils.answer(message, self.strings["args"])
-
-        if self.running:
-            self.running = False
-            await utils.answer(message, self.strings["stopped"])
-            await sleep(1)
+        except: return await utils.answer(message, self.strings["args"])
 
         self.running = True
         await utils.answer(message, self.strings["running"])
-
         while self.running:
-            try:
-                await self._client.send_message("good_biznesbot", "/region")
-                await sleep(5)
-                success, button_text = await self.find_and_click(message)
-                
-                if not self.running:
-                    break
-                    
-                if success:
-                    await utils.answer(message, self.strings["found"].format(button_text))
-                else:
-                    await utils.answer(message, self.strings["not_found"])
+            await self._client.send_message("good_biznesbot", "/region")
+            await sleep(5)
+            await self._find_and_click(message)
+            await sleep(interval * 60)
 
-                await sleep(interval * 60)
+    async def bizignorecmd(self, message):
+        """Игнор владельцев: .bizignore add ник"""
+        await utils.answer(message, "Игнор-лист обновлен (функция в разработке)")
 
-            except Exception as e:
-                await utils.answer(message, f"⚠️ Ошибка: {str(e)}")
-                self.running = False
-
-    async def bignorecmd(self, message):
-        """Управление игнор-листом владельцев. Используй: .ignore add/remove/list/clear <ник>"""
-        args = utils.get_args_raw(message)
-        if not args:
-            return await utils.answer(message, "❌ Укажите действие: add/remove/list/clear <ник>")
-
-        parts = args.split(" ", 1)
-        action = parts[0].lower()
-        owner = parts[1] if len(parts) > 1 else None
-
-        if action == "add" and owner:
-            if owner not in self.config["IGNORE_OWNERS"]:
-                self.config["IGNORE_OWNERS"].append(owner)
-                await utils.answer(message, self.strings["ignore_set"].format(owner))
-        elif action == "remove" and owner:
-            if owner in self.config["IGNORE_OWNERS"]:
-                self.config["IGNORE_OWNERS"].remove(owner)
-                await utils.answer(message, self.strings["ignore_removed"].format(owner))
-        elif action == "list":
-            owners = ", ".join(self.config["IGNORE_OWNERS"]) if self.config["IGNORE_OWNERS"] else "пуст"
-            await utils.answer(message, self.strings["ignore_list"].format(owners))
-        elif action == "clear":
-            self.config["IGNORE_OWNERS"] = []
-            await utils.answer(message, self.strings["ignore_clear"])
-        else:
-            await utils.answer(message, "❌ Неверное действие. Используй: .ignore add/remove/list/clear <ник>")
-
-    async def stopcmd(self, message):
-        """Остановить автоматизацию"""
+    async def bizstopcmd(self, message):
+        """Остановить: .bizstop"""
         self.running = False
         await utils.answer(message, self.strings["stopped"])
